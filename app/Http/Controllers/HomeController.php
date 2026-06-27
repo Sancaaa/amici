@@ -1,26 +1,25 @@
 <?php
-
-
 namespace App\Http\Controllers;
-
-use App\Models\Restaurant;
 use Inertia\Inertia;
-
-
+use App\Services\OdooService;
+use Illuminate\Support\Facades\Log;
 class HomeController extends Controller {
+    protected $odooService;
+    public function __construct(OdooService $odooService)
+    {
+        $this->odooService = $odooService;
+    }
     public function index()
-{
-    return Inertia::render('welcome', [
-    'restaurants' => Restaurant::select(
-        'restaurant_id',
-        'restaurant_name',
-        'map_x',
-        'map_y',
-
-    )
-    ->whereNotNull('map_x')
-    ->get()
-]);
-
-}
+    {
+        $tenants = [];
+        try {
+            // Mengambil data tenant aktif dari Odoo
+            $tenants = $this->odooService->getTenants();
+        } catch (\Exception $e) {
+            Log::error('Gagal mengambil data tenant untuk halaman utama: ' . $e->getMessage());
+        }
+        return Inertia::render('welcome', [
+            'restaurants' => $tenants
+        ]);
+    }
 }
