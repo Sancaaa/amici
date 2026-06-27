@@ -2,156 +2,76 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Menu;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
+use App\Services\OdooService;
 
 class MenuController extends Controller
 {
-    public function index()
-    {
-        $menus = Menu::with(['category', 'restaurant'])->get();
+    protected $odooService;
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Daftar semua menu.',
-            'data' => $menus
-        ], 200);
+    public function __construct(OdooService $odooService)
+    {
+        $this->odooService = $odooService;
     }
 
-    public function store(Request $request)
+    public function index(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'menu_name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
-            'desc' => 'nullable|string',
-            'calories' => 'required|numeric|min:0',
-            'protein' => 'required|numeric|min:0',
-            'carbo' => 'required|numeric|min:0',
-            'fat' => 'required|numeric|min:0',
-            'is_vegan' => 'required|boolean',
-            'is_halal' => 'required|boolean',
-            'is_gluten_free' => 'required|boolean',
-            'category_id' => 'required|exists:categories,category_id',
-            'restaurant_id' => 'required|exists:restaurants,restaurant_id',
-        ]);
+        try {
+            $tenantId = $request->query('tenant_id');
+            $menus = $this->odooService->getProducts($tenantId);
 
-        if ($validator->fails()) {
+            return response()->json([
+                'status' => true,
+                'message' => 'Daftar semua menu dari Odoo.',
+                'data' => $menus
+            ], 200);
+        } catch (\Exception $e) {
+            \Log::error('Failed to fetch menus from Odoo: ' . $e->getMessage());
             return response()->json([
                 'status' => false,
-                'message' => 'Validasi gagal.',
-                'errors' => $validator->errors()
-            ], 422);
+                'message' => 'Gagal mengambil data dari Odoo.',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $menu = Menu::create([
-            'menu_id' => Str::uuid(),
-            'menu_name' => $request->menu_name,
-            'price' => $request->price,
-            'desc' => $request->desc,
-            'calories' => $request->calories,
-            'protein' => $request->protein,
-            'carbo' => $request->carbo,
-            'fat' => $request->fat,
-            'is_vegan' => $request->is_vegan,
-            'is_halal' => $request->is_halal,
-            'is_gluten_free' => $request->is_gluten_free,
-            'category_id' => $request->category_id,
-            'restaurant_id' => $request->restaurant_id,
-        ]);
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Menu berhasil ditambahkan.',
-            'data' => $menu
-        ], 201);
     }
 
     public function show($id)
     {
-        $menu = Menu::with(['category', 'restaurant'])->find($id);
+        try {
+            // In Odoo, we fetch a single product.template
+            $products = $this->odooService->execute('product.template', 'search_read', [[['id', '=', (int)$id]]], [
+                'fields' => ['id', 'name', 'list_price', 'tenant_id', 'description', 'image_1920'],
+                'limit' => 1
+            ]);
 
-        if (!$menu) {
+            if (empty($products)) {
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Menu tidak ditemukan.'
+                ], 404);
+            }
+
+            return response()->json([
+                'status' => true,
+                'data' => $products[0]
+            ], 200);
+        } catch (\Exception $e) {
             return response()->json([
                 'status' => false,
-                'message' => 'Menu tidak ditemukan.'
-            ], 404);
+                'message' => 'Error Odoo connection.'
+            ], 500);
         }
-
-        return response()->json([
-            'status' => true,
-            'data' => $menu
-        ], 200);
-    }
-
-    public function update(Request $request, $id)
-    {
-        $menu = Menu::find($id);
-
-        if (!$menu) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Menu tidak ditemukan.'
-            ], 404);
-        }
-
-        $validator = Validator::make($request->all(), [
-            'menu_name' => 'sometimes|string|max:255',
-            'price' => 'sometimes|numeric|min:0',
-            'desc' => 'nullable|string',
-            'calories' => 'sometimes|numeric|min:0',
-            'protein' => 'sometimes|numeric|min:0',
-            'carbo' => 'sometimes|numeric|min:0',
-            'fat' => 'sometimes|numeric|min:0',
-            'is_vegan' => 'sometimes|boolean',
-            'is_halal' => 'sometimes|boolean',
-            'is_gluten_free' => 'sometimes|boolean',
-            'category_id' => 'sometimes|exists:categories,category_id',
-            'restaurant_id' => 'sometimes|exists:restaurants,restaurant_id',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validasi gagal.',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        $menu->update($request->all());
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Data menu berhasil diperbarui.',
-            'data' => $menu
-        ], 200);
-    }
-
-    public function destroy($id)
-    {
-        $menu = Menu::find($id);
-
-        if (!$menu) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Menu tidak ditemukan.'
-            ], 404);
-        }
-
-        $menu->delete();
-
-        return response()->json([
-            'status' => true,
-            'message' => 'Menu berhasil dihapus.'
-        ], 200);
     }
 
     public function recommend(Request $request)
     {
         $city = $request->input('city', 'Denpasar');
         $apiKey = env('OPENWEATHER_KEY');
+
+        if (!$apiKey) {
+            return response()->json(['error' => 'API Key cuaca belum dikonfigurasi'], 500);
+        }
 
         $weatherResponse = Http::get("https://api.openweathermap.org/data/2.5/weather", [
             'q' => $city,
@@ -178,24 +98,31 @@ class MenuController extends Controller
             $dayTime = 'malam';
         }
 
-        $menus = Menu::select('menu_name', 'desc', 'price')->get();
+        try {
+            $menus = $this->odooService->getProducts();
+            
+            $menuList = collect($menus)->map(function($m) {
+                $price = $m['list_price'] ?? 0;
+                $name = $m['name'] ?? 'Menu';
+                return "- {$name} ({$price})";
+            })->implode("\n");
 
-        $menuList = $menus->map(fn($m) => "- {$m->menu_name} ({$m->price}): {$m->desc}")
-                        ->implode("\n");
+            $prompt = "
+            Cuaca saat ini: $weather ($temp°C)
+            Waktu: $dayTime
+            Daftar menu tersedia:
+            $menuList
 
-        $prompt = "
-        Cuaca saat ini: $weather ($temp°C)
-        Waktu: $dayTime
-        Daftar menu tersedia:
-        $menuList
+            Dari daftar menu di atas, rekomendasikan 3 makanan yang paling cocok dengan kondisi cuaca dan waktu ini.
+            Jelaskan alasan singkat untuk masing-masing pilihan.
+            ";
 
-        Dari daftar menu di atas, rekomendasikan 3 makanan yang paling cocok dengan kondisi cuaca dan waktu ini.
-        Jelaskan alasan singkat untuk masing-masing pilihan.
-        ";
-
-        return response()->json([
-            'success' => true,
-            'prompt' => $prompt,
-        ]);
+            return response()->json([
+                'success' => true,
+                'prompt' => $prompt,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Gagal mengambil data menu Odoo'], 500);
+        }
     }
 }

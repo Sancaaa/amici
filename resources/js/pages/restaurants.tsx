@@ -1,14 +1,13 @@
 import AppLayout from '@/layouts/app-layout';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { Clock, MapPin, Search, Store, Utensils } from 'lucide-react';
 import { useState } from 'react';
 
 interface Restaurant {
-    restaurant_id: string;
-    restaurant_name: string;
-    open_time: string;
-    close_time: string;
-    desc: string;
+    id: number;
+    name: string;
+    cuisine_type: string;
+    // Odoo might not have open_time locally without customization, use defaults or specific fields
 }
 
 interface PageProps {
@@ -23,12 +22,12 @@ const breadcrumbs = [
     { title: 'Daftar Restoran', href: '/restaurants' },
 ];
 
-export default function RestaurantList({ restaurants, filters }: PageProps) {
+export default function RestaurantList({ restaurants = [], filters }: PageProps) {
     const [searchTerm, setSearchTerm] = useState(filters.search || '');
 
     const filteredRestaurants = restaurants.filter((resto) =>
-        resto.restaurant_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (resto.desc && resto.desc.toLowerCase().includes(searchTerm.toLowerCase()))
+        resto.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (resto.cuisine_type && resto.cuisine_type.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     return (
@@ -61,24 +60,24 @@ export default function RestaurantList({ restaurants, filters }: PageProps) {
                     {filteredRestaurants.length > 0 ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 px-4 sm:px-0">
                             {filteredRestaurants.map((resto) => (
-                                <div key={resto.restaurant_id} className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full group">
+                                <div key={resto.id} className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden flex flex-col h-full group">
 
                                     <div className="h-40 bg-gradient-to-r from-orange-100 to-orange-50 flex items-center justify-center relative overflow-hidden">
                                         <Store className="w-16 h-16 text-orange-300 group-hover:scale-110 transition-transform duration-500" />
                                         <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold text-gray-700 shadow-sm">
-                                            {resto.open_time.substring(0, 5)} - {resto.close_time.substring(0, 5)}
+                                            10:00 - 22:00
                                         </div>
                                     </div>
 
                                     <div className="p-6 flex flex-col flex-grow">
                                         <div className="flex justify-between items-start mb-2">
                                             <h3 className="text-xl font-bold text-gray-900 group-hover:text-orange-600 transition-colors">
-                                                {resto.restaurant_name}
+                                                {resto.name}
                                             </h3>
                                         </div>
 
                                         <p className="text-gray-500 text-sm mb-4 line-clamp-2 flex-grow">
-                                            {resto.desc || 'Menyajikan berbagai hidangan lezat untuk Anda nikmati.'}
+                                            {resto.cuisine_type ? `Spesialisasi: ${resto.cuisine_type}` : 'Menyajikan berbagai hidangan lezat untuk Anda nikmati.'}
                                         </p>
 
                                         <div className="flex items-center gap-4 text-xs text-gray-400 mb-6 border-t border-gray-100 pt-4">
@@ -93,7 +92,7 @@ export default function RestaurantList({ restaurants, filters }: PageProps) {
                                         </div>
 
                                         <Link
-                                            href={`/reservation?restaurant_id=${resto.restaurant_id}`}
+                                            href={`/reservation?tenant_id=${resto.id}`}
                                             className="w-full flex items-center justify-center gap-2 bg-gray-900 hover:bg-orange-600 text-white font-medium py-3 rounded-xl transition-colors duration-300"
                                         >
                                             <Utensils className="w-4 h-4" />
