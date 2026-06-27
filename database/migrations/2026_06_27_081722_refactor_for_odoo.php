@@ -22,7 +22,7 @@ return new class extends Migration
         Schema::dropIfExists('roles');
         
         // 2. Modify table_reservations to use Odoo IDs (integers/strings) and add customer details
-        Schema::table('table_reservations', function (Blueprint $table) {
+        Schema::table('table', function (Blueprint $table) {
             $table->string('customer_name')->nullable()->after('user_id');
             $table->string('customer_phone')->nullable()->after('customer_name');
             // user_id can now be nullable for guest walk-ins
